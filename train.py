@@ -41,11 +41,14 @@ def train(args):
     else:
         fname = "public.csv.gz"
 
-    X_learning, y_learning = preprocess(join(args.data_dir, fname))
-    model = EnsembleModel()
-    model.train(X_learning, y_learning)
+    df_learning, y_learning = preprocess(join(args.data_dir, fname))
+
+    my_model = EnsembleModel()
+    my_model.train(df_learning, y_learning)
+    predictions = my_model.predict(df_learning)
+    predictions.head()
     # save the model to disk
-    save_model(model, args.model_dir)
+    save_model(my_model, args.model_dir)
 
 
 def save_model(model, model_dir):

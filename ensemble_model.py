@@ -12,47 +12,52 @@ logging.basicConfig(level=logging.INFO)
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.models = [RandomForestClassifier(10) for _ in self.targets]
+        self.models = [RandomForestClassifier(20) for _ in self.targets]
 
-    def train(self, X_learning, y_learning):
+    def get_X(self, df):
+        X = df.drop(columns=["machine", "window"])
+        return X
+
+    def train(self, df_learning, y_learning):
         for model, target in zip(self.models, self.targets):
             logger.info(f"Train {target}")
             mask = (~y_learning[target].isna()) & y_learning.operating
-            X_learning_tmp = X_learning[mask]
+            X_learning_tmp = self.get_X(df_learning[mask])
+            self.X_cols = list(X_learning_tmp)
             y_learning_tmp = y_learning[mask][target]
-            model.fit(X_learning_tmp.fillna(0), y_learning_tmp)
+            model.fit(X_learning_tmp.fillna(0), y_learning_tmp.astype(int))
 
-    def predict(self, inputs):
-        print("INPUTS SHAPE", len(inputs.columns), len(inputs))
-        inputs = inputs.rename(columns={inputs.columns[0]: "timestamp"})
-        # Cast to date
-        inputs.iloc[:, 0] = pd.to_datetime(inputs.iloc[:, 0])
-        inputs = inputs.set_index(inputs.columns[0])
-        inputs.columns = inputs.columns.map(lambda _: _.split(".")[0])
-        x_inputs = []
-        for i in range(0, len(inputs.columns), 106):
-            x_inputs.append(inputs.iloc[:, i : (i + 106)])
+    def predict(self, df_prod):
+        print("INPUTS SHAPE", len(df_prod.columns), len(df_prod))
+        print("df_prod.head()", df_prod.head())
+        predictions = df_prod[["machine", "window"]].copy()
 
-        # do predictions
-        y_predict = [dict() for _ in x_inputs]
         for model, target in zip(self.models, self.targets):
-            for y_machine, x_machine in zip(y_predict, x_inputs):
-                # Drop NA useless no? we already did it previously
-                # Should we cast to bool?
-                y_machine[target] = model.predict(x_machine.fillna(0).values).astype(
-                    bool
-                )
-        predictions = [
-            pd.DataFrame(y, index=x.dropna().index, columns=self.targets)
-            for x, y in zip(x_inputs, y_predict)
-        ]
-        import numpy as np
+            logger.info(f"Predict {target}")
+            X_prod_tmp = self.get_X(df_prod)
+            X_prod_tmp = X_prod_tmp[self.X_cols]
+            predictions[target] = model.predict(X_prod_tmp.fillna(0)).astype(bool)
 
-        # combine into one dataframe, machines are sorted in alphabetical order
-        order = np.argsort([x.index.name for x in x_inputs])
-        predictions = [predictions[i][self.targets] for i in order]
-        predictions = pd.concat(predictions, axis=1)
+        machines_names = predictions["machine"].unique().tolist()
+        machines_names.sort()
+
+        predictions = pd.pivot(
+            predictions,
+            columns="machine",
+            index=["window"],
+            values=self.targets,
+        )
+
+        predictions.columns = [f"{col[1]}.{col[0]}" for col in predictions.columns]
+        cols = []
+        for machine_name in machines_names:
+            for target in self.targets:
+                cols.append(f"{machine_name}.{target}")
+
+        predictions = predictions.reindex(cols, axis=1)
         predictions = predictions.reset_index()
+
         print("PREDICTIONS SHAPE", len(predictions.columns), len(predictions))
+        print("predictions.head(5)", predictions.head(5))
 
         return predictions

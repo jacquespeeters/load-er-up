@@ -76,11 +76,14 @@ def preprocess(data_file):
     # generate targets
     actuals = [generate_actuals(df_machine) for df_machine in df_machines]
     y_learning = pd.concat(actuals)
+    y_learning = y_learning.reset_index()
 
     # Yes concat work it is correctly aligned
     # nrow_before = df_learning.shape[0]
     # df_learning = pd.concat([df_learning, df_y], axis=1)
     # assert df_learning.shape[0] == nrow_before
+
+    df_learning = df_learning.reset_index()
 
     return df_learning, y_learning
 
