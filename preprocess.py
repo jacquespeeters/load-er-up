@@ -61,7 +61,9 @@ def preprocess(data_file):
     # TODO do here rolling FE
     cols = list(df_learning)
 
-    list_window = [60 * 2 ** i for i in range(6)]
+    # list_window = [60 * 2 ** i for i in range(6)]
+    # Iterate faster atm
+    list_window = [60 * 2 ** 3]
     for window in list_window:
         cols_fe = [f"{col}_mean_{window}" for col in cols]
         df_learning[cols_fe] = df_learning.groupby(["machine"])[cols].transform(
@@ -189,4 +191,5 @@ if __name__ == "__main__":
     df_learning = preprocess(data_file=args.input)
 
     # write to the output location
+    # to_csv is super slow
     df_learning.to_csv(args.output)
