@@ -1,7 +1,6 @@
 """Unearthed Sound The Alarm Training Template"""
 import argparse
 import logging
-import os
 import pickle
 import sys
 from io import StringIO
@@ -9,9 +8,11 @@ from os import getenv
 from os.path import abspath, join
 
 import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
 
-from ensemble_model import EnsembleModel
 from preprocess import preprocess
+from ensemble_model import EnsembleModel
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -19,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 # Work around for a SageMaker path issue
 # (see https://github.com/aws/sagemaker-python-sdk/issues/648)
 # WARNING - removing this may cause the submission process to fail
-if abspath("/opt/ml/code") not in sys.path:
-    sys.path.append(abspath("/opt/ml/code"))
+if abspath('/opt/ml/code') not in sys.path:
+    sys.path.append(abspath('/opt/ml/code'))
 
 
 def train(args):
@@ -28,24 +29,39 @@ def train(args):
 
     Your model code goes here.
     """
-    logger.info("calling training function")
+    logger.info('calling training function')
+    with open(__file__, 'r') as f:
+        file_content = f.read()
+        logger.info(file_content)
 
     # preprocess
-    # if you require any particular preprocessing to create features then this
+    # if you require any particular preprocessing to create features then this 
     # *must* be contained in the preprocessing function for the Unearthed pipeline
     # apply it to the private data
+    x_inputs, y_inputs = preprocess(join(args.data_dir, 'public.csv.gz'))
+    logger.info(f"training input shape for each machine is {x_inputs[0].shape}")
+    logger.info(f"training target shape for each machine is {y_inputs[0].shape}")
 
-    # In local read in 10sec instead of 10mins
-    if os.path.exists(join(args.data_dir, "public.parquet")):
-        fname = "public.parquet"
-    else:
-        fname = "public.csv.gz"
+    # an example model
+    lags = ['y_1', 'y_4', 'y_12', 'y_24']
+    models = [RandomForestClassifier() for _ in lags]
+    for model, lag in zip(models, lags):
+        x = []
+        y = []
+        for x_machine, y_machine in zip(x_inputs, y_inputs):
 
-    X_learning, y_learning = preprocess(join(args.data_dir, fname))
-    model = EnsembleModel()
-    model.train(X_learning, y_learning)
+            mask = (~y_machine[lag].isna()) & y_machine.operating
+            y_machine = y_machine[lag]
+            x_machine = x_machine[mask]
+            y_machine = y_machine[mask]
+            x.append(x_machine.values)
+            y.append(y_machine.values)
+        y = np.concatenate(y).astype(float)
+        x = np.concatenate(x)
+        model.fit(x, y)
+
     # save the model to disk
-    save_model(model, args.model_dir)
+    save_model(EnsembleModel(models), args.model_dir)
 
 
 def save_model(model, model_dir):
@@ -57,7 +73,7 @@ def save_model(model, model_dir):
     WARNING - modifying this function may cause the submission process to fail.
     """
     logger.info(f"saving model to {model_dir}")
-    with open(join(model_dir, "model.pkl"), "wb") as model_file:
+    with open(join(model_dir, 'model.pkl'), 'wb') as model_file:
         pickle.dump(model, model_file)
 
 
@@ -73,7 +89,7 @@ def model_fn(model_dir):
         file_contents = f.read()
         logger.info(file_contents)
     logger.info(str(EnsembleModel))
-    with open(join(model_dir, "model.pkl"), "rb") as file:
+    with open(join(model_dir, 'model.pkl'), 'rb') as file:
         return pickle.load(file)
 
 
@@ -88,29 +104,17 @@ def input_fn(input_data, content_type):
     return pd.read_csv(StringIO(input_data))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     """Training Main
 
     The main function is called by both Unearthed's SageMaker pipeline and the
     Unearthed CLI's "unearthed train" command.
-
+    
     WARNING - modifying this function may cause the submission process to fail.
 
     The main function must call preprocess, arrange th
-    """
-
-    if os.path.exists("./data/public"):
-        default_model_dir = "./data/public"
-    else:
-        default_model_dir = getenv("SM_MODEL_DIR", "/opt/ml/models")
-
-    if os.path.exists("./data/public"):
-        default_data_dir = "./data/public"
-    else:
-        default_data_dir = getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training")
-
+    """    
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, default=default_model_dir)
-    parser.add_argument("--data_dir", type=str, default=default_data_dir)
-    args, _ = parser.parse_known_args()
-    train(args)
+    parser.add_argument('--model_dir', type=str, default=getenv('SM_MODEL_DIR', '/opt/ml/models'))
+    parser.add_argument('--data_dir', type=str, default=getenv('SM_CHANNEL_TRAINING', '/opt/ml/input/data/training'))
+    train(parser.parse_args())
