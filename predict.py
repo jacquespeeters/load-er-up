@@ -1,8 +1,9 @@
 """Unearthed Sound The Alarm Prediction Template"""
-import logging
 import argparse
+import logging
 from os import getenv
 from os.path import join
+
 import numpy as np
 import pandas as pd
 
@@ -22,13 +23,22 @@ if __name__ == "__main__":
     preprocessing and Batch Transform Jobs are used to pass the result of preprocessing
     to the trained model.
     """
+    if os.path.exists("./data/public"):
+        default_model_dir = "./data/public"
+        default_data_dir = "./data/public"
+        default_pred_dir = "./data/public/predictions.csv"
+    else:
+        default_model_dir = getenv("SM_MODEL_DIR", "/opt/ml/models")
+        default_data_dir = getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training")
+        default_pred_dir = "/opt/ml/output/predictions.csv.out"
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, default=getenv("SM_MODEL_DIR", "/opt/ml/models"))
-    parser.add_argument("--data_dir", type=str, default=getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training"))
+    parser.add_argument("--model_dir", type=str, default=default_model_dir)
+    parser.add_argument("--data_dir", type=str, default=default_data_dir)
     args, _ = parser.parse_known_args()
-    
+
     # call preprocessing on the data
-    x_inputs, _ = preprocess(join(args.data_dir, "public.csv.gz"))
+    x_inputs, _ = preprocess(join(args.data_dir, "public.parquet"))
 
     # pass the model the preprocessed data
     logger.info("creating predictions")
@@ -39,6 +49,4 @@ if __name__ == "__main__":
     logger.info(f"predictions have shape of {predictions.shape}")
 
     # save the predictions
-    predictions.to_csv(
-        "/opt/ml/output/predictions.csv.out"
-    )
+    predictions.to_csv(default_pred_dir)

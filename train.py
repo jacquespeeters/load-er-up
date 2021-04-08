@@ -7,12 +7,12 @@ from io import StringIO
 from os import getenv
 from os.path import abspath, join
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-from preprocess import preprocess
 from ensemble_model import EnsembleModel
+from preprocess import preprocess
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 # Work around for a SageMaker path issue
 # (see https://github.com/aws/sagemaker-python-sdk/issues/648)
 # WARNING - removing this may cause the submission process to fail
-if abspath('/opt/ml/code') not in sys.path:
-    sys.path.append(abspath('/opt/ml/code'))
+if abspath("/opt/ml/code") not in sys.path:
+    sys.path.append(abspath("/opt/ml/code"))
 
 
 def train(args):
@@ -29,21 +29,24 @@ def train(args):
 
     Your model code goes here.
     """
-    logger.info('calling training function')
-    with open(__file__, 'r') as f:
-        file_content = f.read()
-        logger.info(file_content)
+    logger.info("calling training function")
 
     # preprocess
-    # if you require any particular preprocessing to create features then this 
+    # if you require any particular preprocessing to create features then this
     # *must* be contained in the preprocessing function for the Unearthed pipeline
     # apply it to the private data
-    x_inputs, y_inputs = preprocess(join(args.data_dir, 'public.csv.gz'))
+    # In local read in 10sec instead of 10mins
+    if os.path.exists(join(args.data_dir, "public.parquet")):
+        fname = "public.parquet"
+    else:
+        fname = "public.csv.gz"
+
+    x_inputs, y_inputs = preprocess(join(args.data_dir, fname))
     logger.info(f"training input shape for each machine is {x_inputs[0].shape}")
     logger.info(f"training target shape for each machine is {y_inputs[0].shape}")
 
     # an example model
-    lags = ['y_1', 'y_4', 'y_12', 'y_24']
+    lags = ["y_1", "y_4", "y_12", "y_24"]
     models = [RandomForestClassifier() for _ in lags]
     for model, lag in zip(models, lags):
         x = []
@@ -73,7 +76,7 @@ def save_model(model, model_dir):
     WARNING - modifying this function may cause the submission process to fail.
     """
     logger.info(f"saving model to {model_dir}")
-    with open(join(model_dir, 'model.pkl'), 'wb') as model_file:
+    with open(join(model_dir, "model.pkl"), "wb") as model_file:
         pickle.dump(model, model_file)
 
 
@@ -89,7 +92,7 @@ def model_fn(model_dir):
         file_contents = f.read()
         logger.info(file_contents)
     logger.info(str(EnsembleModel))
-    with open(join(model_dir, 'model.pkl'), 'rb') as file:
+    with open(join(model_dir, "model.pkl"), "rb") as file:
         return pickle.load(file)
 
 
@@ -104,17 +107,29 @@ def input_fn(input_data, content_type):
     return pd.read_csv(StringIO(input_data))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """Training Main
 
     The main function is called by both Unearthed's SageMaker pipeline and the
     Unearthed CLI's "unearthed train" command.
-    
+
     WARNING - modifying this function may cause the submission process to fail.
 
     The main function must call preprocess, arrange th
-    """    
+    """
+
+    if os.path.exists("./data/public"):
+        default_model_dir = "./data/public"
+    else:
+        default_model_dir = getenv("SM_MODEL_DIR", "/opt/ml/models")
+
+    if os.path.exists("./data/public"):
+        default_data_dir = "./data/public"
+    else:
+        default_data_dir = getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training")
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_dir', type=str, default=getenv('SM_MODEL_DIR', '/opt/ml/models'))
-    parser.add_argument('--data_dir', type=str, default=getenv('SM_CHANNEL_TRAINING', '/opt/ml/input/data/training'))
-    train(parser.parse_args())
+    parser.add_argument("--model_dir", type=str, default=default_model_dir)
+    parser.add_argument("--data_dir", type=str, default=default_data_dir)
+    args, _ = parser.parse_known_args()
+    train(args)
