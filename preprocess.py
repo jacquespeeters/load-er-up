@@ -31,7 +31,10 @@ def preprocess(data_file):
             data_file, parse_dates=["timestamp"], na_values=["Shutdown", "Pt Created"]
         )
 
-    if not os.path.exists("./data/public/public.parquet"):
+    if (os.path.exists("./data/public")) and (
+        not os.path.exists("./data/public/public.parquet")
+    ):
+        # If local and file don't exists yet
         df.to_parquet("./data/public/public.parquet")
 
     logger.info(f"running preprocess on {df.shape}")
@@ -191,7 +194,7 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
 
     # call preprocessing on private data
-    df_learning = preprocess(data_file=args.input)
+    df_learning, _ = preprocess(data_file=args.input)
 
     # write to the output location
     # to_csv is super slow
