@@ -40,22 +40,15 @@ def preprocess(data_file):
     logger.info(f"running preprocess on {df.shape}")
     # (4030366, 1009)
 
-    # We seem to drop binary columns here
-    cols_to_keep = [
+    # Cast string binary to float
+    cols_binary = [
         col
         for col in df.columns
-        if ("BrakeSwitch" not in col)
-        and ("NeutralizerSwitch" not in col)
-        and ("ParkingBrakeSwitch" not in col)
+        if ("BrakeSwitch" in col)
+        or ("NeutralizerSwitch" in col)
+        or ("ParkingBrakeSwitch" in col)
     ]
-
-    # df[cols_to_keep].sample(10)
-
-    # tmp = df.sample(10).drop(columns=cols_to_keep)
-    # tmp
-    # tmp.astype(bool)
-
-    df = df[cols_to_keep]
+    df[cols_binary] = df[cols_binary].replace("On", "1").replace("Off", 0).astype(float)
 
     logger.info(f"data read from {data_file} has shape of {df.shape}")
 
