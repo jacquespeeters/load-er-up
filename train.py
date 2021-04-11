@@ -41,7 +41,9 @@ def train(args):
     else:
         fname = "public.csv.gz"
 
+    # %%time
     df_learning, y_learning = preprocess(join(args.data_dir, fname))
+    # 4min20sec in local, we should avoid this when dev
 
     my_model = EnsembleModel()
     my_model.train(df_learning, y_learning)

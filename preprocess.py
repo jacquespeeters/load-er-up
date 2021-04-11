@@ -49,6 +49,12 @@ def preprocess(data_file):
         and ("ParkingBrakeSwitch" not in col)
     ]
 
+    # df[cols_to_keep].sample(10)
+
+    # tmp = df.sample(10).drop(columns=cols_to_keep)
+    # tmp
+    # tmp.astype(bool)
+
     df = df[cols_to_keep]
 
     logger.info(f"data read from {data_file} has shape of {df.shape}")
@@ -64,9 +70,12 @@ def preprocess(data_file):
     # TODO do here rolling FE
     cols = list(df_learning)
 
-    # list_window = [60 * 2 ** i for i in range(6)]
+    print("TODO - Change to power 24 hours")
+
+    # list_window = [60 * 2 ** 3]
     # Iterate faster atm
-    list_window = [60 * 2 ** 3]
+    list_window = [60 * 2 ** i for i in range(3, 5)]
+    # list_window = [60 * 2 ** i for i in range(9)]
     for window in list_window:
         cols_fe = [f"{col}_mean_{window}" for col in cols]
         df_learning[cols_fe] = df_learning.groupby(["machine"])[cols].transform(
@@ -87,6 +96,12 @@ def preprocess(data_file):
     # assert df_learning.shape[0] == nrow_before
 
     df_learning = df_learning.reset_index()
+    df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
+    df_learning["window_hour"] = df_learning["window"].dt.hour
+    df_learning["window_minute"] = df_learning["window"].dt.minute
+    df_learning.sample(5)["window"].dt.minute
+
+    logger.info(f"df_learning.shape:  {df_learning.shape}")
 
     return df_learning, y_learning
 
@@ -158,15 +173,36 @@ def generate_actuals(df_machine):
     )
 
 
-def _build_x_input(df):
-    df = df.copy()
-    input_columns = df.columns.values.tolist()
+def _build_x_input(df_machine_tmp):
+    df_machine_tmp = df_machine_tmp.copy()
+    input_columns = df_machine_tmp.columns.values.tolist()
     # Aggregate data at minute granularity
-    df["window"] = df.index.floor("min")
-    df = df.groupby(["machine", "window"])[input_columns].agg(["mean", "max"])
-    df = df.fillna(0.0)  # TODO leave NA
-    df.columns = ["_".join(_) for _ in df.columns]
-    return df
+    df_machine_tmp["window"] = df_machine_tmp.index.floor("min")
+    print("TODO add y_0 here")
+    df_machine_tmp["y_0"] = (
+        df_machine_tmp.assign(
+            operating=lambda _: (_["AccelPedalPos1"] > 98)
+            & (_["EngSpeed"] > 1800)
+            & (_["ActualEngPercentTorque"] > 98)
+        )
+        .assign(performing=lambda _: _["EngTurboBoostPress"] > 140)
+        # y_0 is whether the machine is operating and performing
+        # right now. Important to do this *before* aggregating,
+        # as otherwise it might be operating and performing within
+        # the same minute, but not necessarily at the same time
+        .assign(y_0=lambda _: _["operating"] & _["performing"])
+        .groupby(["machine", "window"])[["y_0"]]
+        .transform("max")
+        .astype(int)
+    )
+
+    input_columns = input_columns + ["y_0"]
+
+    df_machine_tmp = df_machine_tmp.groupby(["machine", "window"])[input_columns].agg(
+        ["mean", "max"]
+    )
+    df_machine_tmp.columns = ["_".join(_) for _ in df_machine_tmp.columns]
+    return df_machine_tmp
 
 
 if __name__ == "__main__":
