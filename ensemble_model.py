@@ -5,10 +5,11 @@ import mlflow
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+# How to run Mlflow:
+# > mlflow ui
 # How to make port redirection from DS1 to local to access MLflow
-# ssh -N -f -L localhost:5000:localhost:5000 jpeeters@ds1
+# > ssh -N -f -L localhost:5000:localhost:5000 jpeeters@ds1
 # (replace jpeeters with your username)
-
 
 # from preprocess import preprocess
 

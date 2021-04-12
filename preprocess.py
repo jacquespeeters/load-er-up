@@ -60,7 +60,6 @@ def preprocess(data_file):
     x_inputs = [_build_x_input(_) for _ in df_machines]
     df_learning = pd.concat(x_inputs)
 
-    # TODO do here rolling FE
     cols = list(df_learning)
 
     print("TODO - Change to power 24 hours")
@@ -71,8 +70,9 @@ def preprocess(data_file):
     # list_window = [60 * 2 ** i for i in range(9)]
     for window in list_window:
         cols_fe = [f"{col}_mean_{window}" for col in cols]
+        # We mostly have missing values, hence min_periods=0
         df_learning[cols_fe] = df_learning.groupby(["machine"])[cols].transform(
-            lambda x: x.rolling(window, min_periods=window).mean()
+            lambda x: x.rolling(window, min_periods=0).mean()
         )
 
     # Drop useless columns
