@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.models = [lgb.LGBMClassifier(importance_type="gain") for _ in self.targets]
+        self.models = [lgb.LGBMRegressor(importance_type="gain") for _ in self.targets]
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window"])
@@ -53,12 +53,12 @@ class EnsembleModel:
             print(
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
             )
-            mlflow.log_metric(
-                f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
-            )
-            mlflow.log_metric(
-                f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
-            )
+            # mlflow.log_metric(
+            #     f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
+            # )
+            # mlflow.log_metric(
+            #     f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
+            # )
             mlflow.log_metric(f"best_iteration_{target}", model._best_iteration)
 
             # mlflow.log_metric("best_iteration", best_iteration)
@@ -67,8 +67,8 @@ class EnsembleModel:
         mlflow.end_run()
 
     def predict(self, df_prod):
-        print("INPUTS SHAPE", len(df_prod.columns), len(df_prod))
-        print("df_prod.head()", df_prod.head())
+        # print("df_prod.head()")
+        # print(df_prod.tail())
         predictions = df_prod[["machine", "window"]].copy()
 
         def predict_optim_f1():
@@ -80,6 +80,7 @@ class EnsembleModel:
             logger.info(f"Predict {target}")
             X_prod_tmp = self.get_X(df_prod)
             X_prod_tmp = X_prod_tmp[self.X_cols]
+            print("Always predict true with LGBMRegressor")
             predictions[target] = model.predict(X_prod_tmp).astype(bool)
 
         machines_names = predictions["machine"].unique().tolist()
@@ -101,7 +102,7 @@ class EnsembleModel:
         predictions = predictions.reindex(cols, axis=1)
         predictions = predictions.reset_index()
 
-        print("PREDICTIONS SHAPE", len(predictions.columns), len(predictions))
-        print("predictions.head(5)", predictions.head(5))
+        print("predictions.tail(5)")
+        print(predictions.tail(5))
 
         return predictions

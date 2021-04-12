@@ -1,5 +1,5 @@
-import logging
 import argparse
+import logging
 
 import numpy as np
 import pandas as pd
@@ -70,6 +70,22 @@ def f1_error(y, y_pred):
         error = 2 * precision * recall / (precision + recall)
 
     return error
+
+
+def scoring_fn_func(df_targets, df_predictions):
+    df_targets = df_targets.set_index("window")
+    targets = []
+    for i in range(0, len(df_targets.columns), 4):
+        targets.append(df_targets.iloc[:, i : (i + 4)])
+
+    df_predictions = df_predictions.set_index(df_predictions.columns[0])
+    # predictions.columns = predictions.columns.map(lambda _: _.split('.')[0])
+
+    predictions = []
+    for i in range(0, len(df_predictions.columns), 4):
+        predictions.append(df_predictions.iloc[:, i : (i + 4)])
+
+    return scoring_fn(targets, predictions, weights, f1_error)
 
 
 if __name__ == "__main__":
