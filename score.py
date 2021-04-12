@@ -127,8 +127,6 @@ if __name__ == "__main__":
     for i in range(0, len(df_pred.columns), 4):
         predictions.append(df_pred.iloc[:, i : (i + 4)])
 
-    logger.info(f"predictions have shape of {predictions[0].shape}")
-
     score = scoring_fn(targets, predictions, weights, f1_error)
 
     # write to the output location

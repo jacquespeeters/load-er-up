@@ -7,6 +7,7 @@ setup(
         "preprocess",
         "train",
         "ensemble_model",
+        "score",
         # note predict and score modules are not required to be submitted
         # add any additional modules you want included in your submission here
     ],
