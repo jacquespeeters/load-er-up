@@ -68,12 +68,17 @@ def preprocess(data_file):
     # Iterate faster atm
     list_window = [60 * 2 ** i for i in range(3, 5)]
     # list_window = [60 * 2 ** i for i in range(9)]
+    grouped = df_learning.groupby(["machine"])
     for window in list_window:
-        cols_fe = [f"{col}_mean_{window}" for col in cols]
-        # We mostly have missing values, hence min_periods=0
-        df_learning[cols_fe] = df_learning.groupby(["machine"])[cols].transform(
-            lambda x: x.rolling(window, min_periods=0).mean()
-        )
+        for func in [
+            "mean",
+            # "std",
+        ]:
+            cols_fe = [f"{col}_{func}_{window}" for col in cols]
+            # We mostly have missing values, hence min_periods=0
+            df_learning[cols_fe] = grouped[cols].transform(
+                lambda x: x.rolling(window, min_periods=window).agg(f"{func}")
+            )
 
     # Drop useless columns
     df_learning = df_learning.drop(columns=cols)
@@ -92,7 +97,6 @@ def preprocess(data_file):
     df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
     df_learning["window_hour"] = df_learning["window"].dt.hour
     df_learning["window_minute"] = df_learning["window"].dt.minute
-    df_learning.sample(5)["window"].dt.minute
 
     logger.info(f"df_learning.shape:  {df_learning.shape}")
 
