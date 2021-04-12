@@ -1,8 +1,14 @@
 import logging
 
 import lightgbm as lgb
+import mlflow
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+# How to make port redirection from DS1 to local to access MLflow
+# ssh -N -f -L localhost:5000:localhost:5000 jpeeters@ds1
+# (replace jpeeters with your username)
+
 
 # from preprocess import preprocess
 
@@ -13,13 +19,15 @@ logging.basicConfig(level=logging.INFO)
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.models = [lgb.LGBMRegressor(importance_type="gain") for _ in self.targets]
+        self.models = [lgb.LGBMClassifier(importance_type="gain") for _ in self.targets]
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window"])
         return X
 
     def train(self, df_learning, y_learning):
+        mlflow.set_experiment("training")
+        mlflow.start_run()
         for model, target in zip(self.models, self.targets):
             logger.info(f"Train {target}")
             mask = (~y_learning[target].isna()) & y_learning.operating
@@ -41,7 +49,21 @@ class EnsembleModel:
                 early_stopping_rounds=20,
                 verbose=10,
             )
-            # lgb.plot_importance(model)
+            print(
+                lgb.plot_importance(model, importance_type="gain", max_num_features=20)
+            )
+            mlflow.log_metric(
+                f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
+            )
+            mlflow.log_metric(
+                f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
+            )
+            mlflow.log_metric(f"best_iteration_{target}", model._best_iteration)
+
+            # mlflow.log_metric("best_iteration", best_iteration)
+            # mlflow.log_artifact(path.path_feature_importance())
+
+        mlflow.end_run()
 
     def predict(self, df_prod):
         print("INPUTS SHAPE", len(df_prod.columns), len(df_prod))

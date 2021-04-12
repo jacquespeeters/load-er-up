@@ -1,0 +1,32 @@
+# Both the Unearthed CLI and the Unearthed submission pipeline will attempt to install
+# any dependencies listed in this file.
+#
+# The list of packages that is already preinstalled in the submission pipeline containers
+# can be found at:
+#   https://github.com/aws/sagemaker-scikit-learn-container/blob/master/requirements.txt
+#
+# For convenience the preinstalled packages and their versions are shown below:
+#
+# If you wish to add further dependencies please add them to end of this file.
+#
+boto3==1.16.4
+botocore==1.19.4
+Flask==1.1.1
+gunicorn==20.0.4
+model-archiver==1.0.3
+multi-model-server==1.1.1
+numpy==1.19.2
+pandas==1.1.3
+psutil==5.7.2
+python-dateutil==2.8.1
+sagemaker-inference==1.2.0
+retrying==1.3.3
+sagemaker-containers==2.8.6.post2
+sagemaker-inference==1.2.0
+sagemaker-training==3.6.2
+scikit-learn==0.23.2
+scipy==1.5.3
+six==1.15.0
+lightgbm==3.2.0
+matplotlib==3.4.1
+mlflow==1.15.0

@@ -171,7 +171,6 @@ def _build_x_input(df_machine_tmp):
     input_columns = df_machine_tmp.columns.values.tolist()
     # Aggregate data at minute granularity
     df_machine_tmp["window"] = df_machine_tmp.index.floor("min")
-    print("TODO add y_0 here")
     df_machine_tmp["y_0"] = (
         df_machine_tmp.assign(
             operating=lambda _: (_["AccelPedalPos1"] > 98)
