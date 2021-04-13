@@ -2,6 +2,7 @@ import logging
 
 import lightgbm as lgb
 import mlflow
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
@@ -20,11 +21,66 @@ logging.basicConfig(level=logging.INFO)
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.models = [lgb.LGBMRegressor(importance_type="gain") for _ in self.targets]
+        self.models = [lgb.LGBMClassifier(importance_type="gain") for _ in self.targets]
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window"])
         return X
+
+    def expected_optim_f1(self, preds):
+        """Optimize expected threshold
+
+        Args:
+            preds ([type]): [description]
+
+        Returns:
+            [type]: boolean preds given best expected threshold
+        """
+        expected_sum = preds.sum()
+        expected_sum
+
+        threshold = preds.quantile([i / 100 for i in range(0, 100)]).unique()
+        fscore = []
+        for thresh in threshold:
+            thresh
+            precision = preds[preds > thresh].mean()
+            recall = preds[preds > thresh].sum() / expected_sum
+            tmp_fscore = 2 * (precision * recall) / (precision + recall)
+            fscore.append(tmp_fscore)
+
+        best_tresh = threshold[np.argmax(fscore)]
+        print(f"Expected best threshold is {best_tresh.round(3)}")
+        print(f"Expected best f-score {round(max(fscore),3)}")
+        return preds > best_tresh
+
+    def format_predictions(self, predictions):
+        """Format predictions to be compliant with competition one
+
+        Args:
+            predictions ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
+        machines_names = predictions["machine"].unique().tolist()
+        machines_names.sort()
+
+        predictions = pd.pivot(
+            predictions,
+            columns="machine",
+            index=["window"],
+            values=self.targets,
+        )
+
+        predictions.columns = [f"{col[1]}.{col[0]}" for col in predictions.columns]
+        cols = []
+        for machine_name in machines_names:
+            for target in self.targets:
+                cols.append(f"{machine_name}.{target}")
+
+        predictions = predictions.reindex(cols, axis=1)
+        predictions = predictions.reset_index()
+        return predictions
 
     def train(self, df_learning, y_learning):
         mlflow.set_experiment("training")
@@ -67,40 +123,28 @@ class EnsembleModel:
         mlflow.end_run()
 
     def predict(self, df_prod):
-        # print("df_prod.head()")
-        # print(df_prod.tail())
         predictions = df_prod[["machine", "window"]].copy()
-
-        def predict_optim_f1():
-            """Optimize threshold"""
-            # TODO
-            return None
 
         for model, target in zip(self.models, self.targets):
             logger.info(f"Predict {target}")
             X_prod_tmp = self.get_X(df_prod)
             X_prod_tmp = X_prod_tmp[self.X_cols]
-            print("Always predict true with LGBMRegressor")
-            predictions[target] = model.predict(X_prod_tmp).astype(bool)
+            # predictions[target] = model.predict(X_prod_tmp)
+            predictions[target] = model.predict_proba(X_prod_tmp)[:, 1]
 
-        machines_names = predictions["machine"].unique().tolist()
-        machines_names.sort()
+        # predictions[self.targets].mean()
 
-        predictions = pd.pivot(
-            predictions,
-            columns="machine",
-            index=["window"],
-            values=self.targets,
-        )
-
-        predictions.columns = [f"{col[1]}.{col[0]}" for col in predictions.columns]
-        cols = []
-        for machine_name in machines_names:
+        def predict_optim_f1(single_machine_pred):
             for target in self.targets:
-                cols.append(f"{machine_name}.{target}")
+                single_machine_pred[target] = self.expected_optim_f1(
+                    single_machine_pred[target]
+                )
+            return single_machine_pred
 
-        predictions = predictions.reindex(cols, axis=1)
-        predictions = predictions.reset_index()
+        predictions[self.targets] = predictions[self.targets].clip(0, 1)
+        grouped = predictions.groupby("machine")
+        predictions = grouped.apply(predict_optim_f1)
+        predictions = self.format_predictions(predictions)
 
         print("predictions.tail(5)")
         print(predictions.tail(5))
