@@ -60,7 +60,13 @@ def preprocess(data_file):
     x_inputs = [_build_x_input(_) for _ in df_machines]
     df_learning = pd.concat(x_inputs)
 
+    # df_learning.isnull().groupby("machine").mean()
+    # df_learning[["y_0_max", "y_0_mean"]].groupby("machine").mean()
+    # df_learning[["y_0_max", "y_0_mean"]].mean()
+
     cols = list(df_learning)
+
+    # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
     list_window = [int(60 * 24 * 2 ** i) for i in range(-2, 2)]
     logger.info(f"Rolling windows size (in minutes): {list_window}")
 
