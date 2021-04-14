@@ -160,7 +160,8 @@ def generate_actuals(df_machine):
         # right now. Important to do this *before* aggregating,
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
-        .assign(y_0=lambda _: _["operating"] & _["performing"])
+        # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
+        .assign(y_0=lambda _: _["operating"])  # & _["performing"])
         .groupby(["machine", "window"])[["operating", "performing", "y_0"]]
         .max()
         .assign(y_1=lambda _: _["y_0"].shift(periods=-1 * 60))
@@ -186,7 +187,8 @@ def _build_x_input(df_machine_tmp):
         # right now. Important to do this *before* aggregating,
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
-        .assign(y_0=lambda _: _["operating"] & _["performing"])
+        # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
+        .assign(y_0=lambda _: _["operating"])  # & _["performing"])
         .groupby(["machine", "window"])[["y_0"]]
         .transform("max")
         .astype(int)
