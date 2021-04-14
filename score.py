@@ -7,7 +7,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-weights = {"y_1": 4, "y_4": 3, "y_12": 2, "y_24": 1}
+weights = {"y_1": 1, "y_4": 2, "y_12": 4, "y_24": 3}
 
 
 def scoring_fn(y, y_pred, weights, error):

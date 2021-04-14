@@ -61,13 +61,9 @@ def preprocess(data_file):
     df_learning = pd.concat(x_inputs)
 
     cols = list(df_learning)
+    list_window = [int(60 * 24 * 2 ** i) for i in range(-2, 2)]
+    logger.info(f"Rolling windows size (in minutes): {list_window}")
 
-    print("TODO - Change to power 24 hours")
-
-    # list_window = [60 * 2 ** 3]
-    # Iterate faster atm
-    list_window = [60 * 2 ** i for i in range(3, 5)]
-    # list_window = [60 * 2 ** i for i in range(9)]
     grouped = df_learning.groupby(["machine"])
     for window in list_window:
         for func in [
