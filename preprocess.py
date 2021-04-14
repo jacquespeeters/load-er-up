@@ -77,7 +77,7 @@ def preprocess(data_file):
             cols_fe = [f"{col}_{func}_{window}" for col in cols]
             # We mostly have missing values, hence min_periods=0
             df_learning[cols_fe] = grouped[cols].transform(
-                lambda x: x.rolling(window, min_periods=window).agg(f"{func}")
+                lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
             )
 
     # Drop useless columns

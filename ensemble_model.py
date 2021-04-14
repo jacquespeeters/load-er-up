@@ -129,10 +129,7 @@ class EnsembleModel:
             logger.info(f"Predict {target}")
             X_prod_tmp = self.get_X(df_prod)
             X_prod_tmp = X_prod_tmp[self.X_cols]
-            # predictions[target] = model.predict(X_prod_tmp)
             predictions[target] = model.predict_proba(X_prod_tmp)[:, 1]
-
-        # predictions[self.targets].mean()
 
         def predict_optim_f1(single_machine_pred):
             for target in self.targets:
@@ -141,9 +138,7 @@ class EnsembleModel:
                 )
             return single_machine_pred
 
-        predictions[self.targets] = predictions[self.targets].clip(0, 1)
-        grouped = predictions.groupby("machine")
-        predictions = grouped.apply(predict_optim_f1)
+        predictions = predictions.groupby("machine").apply(predict_optim_f1)
         predictions = self.format_predictions(predictions)
 
         print("predictions.tail(5)")
