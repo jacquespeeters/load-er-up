@@ -202,6 +202,8 @@ def _build_x_input(df_machine_tmp):
         ["mean", "max"]
     )
     df_machine_tmp.columns = ["_".join(_) for _ in df_machine_tmp.columns]
+    # Strictly identical to y_0_mean
+    df_machine_tmp = df_machine_tmp.drop(columns="y_0_max")
     return df_machine_tmp
 
 

@@ -24,7 +24,7 @@ class EnsembleModel:
         self.models = [lgb.LGBMClassifier(importance_type="gain") for _ in self.targets]
 
     def get_X(self, df):
-        X = df.drop(columns=["machine", "window"])
+        X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
         return X
 
     def expected_optim_f1(self, preds):
@@ -83,6 +83,17 @@ class EnsembleModel:
         return predictions
 
     def train(self, df_learning, y_learning):
+
+        df_learning["FOLD"] = pd.qcut(df_learning["window"], 3, labels=False)
+
+        N_FOLD = 3
+        df_learning["FOLD"] = (
+            df_learning["machine"].astype("category").cat.codes
+            + pd.qcut(df_learning["window"], N_FOLD, labels=False)
+        ).mod(N_FOLD)
+
+        # df_learning[mask].groupby("FOLD").size()
+
         mlflow.set_experiment("training")
         mlflow.start_run()
         for model, target in zip(self.models, self.targets):
@@ -92,32 +103,40 @@ class EnsembleModel:
             self.X_cols = list(X_learning_tmp)
             y_learning_tmp = y_learning[mask][target].astype(int)
             # Split should be by machine to mimic private leaderboard
-            X_train, X_valid, y_train, y_valid = train_test_split(
-                X_learning_tmp,
-                y_learning_tmp,
-                test_size=0.20,
-                random_state=42,
-            )
+            is_valid = df_learning[mask]["FOLD"] == 0
+            X_train = X_learning_tmp[~is_valid]
+            y_train = y_learning_tmp[~is_valid]
+            X_valid = X_learning_tmp[is_valid]
+            y_valid = y_learning_tmp[is_valid]
+
+            # X_train, X_valid, y_train, y_valid = train_test_split(
+            #     X_learning_tmp,
+            #     y_learning_tmp,
+            #     test_size=0.20,
+            #     random_state=42,
+            # )
+
+            model.set_params(**{"min_data_in_leaf": 10000})
 
             model.fit(
                 X_train,
                 y_train,
                 eval_set=[(X_train, y_train), (X_valid, y_valid)],
                 early_stopping_rounds=20,
+                eval_metric="auc",
                 verbose=10,
             )
+
             print(
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
             )
-            # mlflow.log_metric(
-            #     f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
-            # )
-            # mlflow.log_metric(
-            #     f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
-            # )
+            mlflow.log_metric(
+                f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
+            )
+            mlflow.log_metric(
+                f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
+            )
             mlflow.log_metric(f"best_iteration_{target}", model._best_iteration)
-
-            # mlflow.log_metric("best_iteration", best_iteration)
             # mlflow.log_artifact(path.path_feature_importance())
 
         mlflow.end_run()
