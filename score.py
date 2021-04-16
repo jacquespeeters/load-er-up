@@ -5,7 +5,11 @@ import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
 
 weights = {"y_1": 1, "y_4": 2, "y_12": 4, "y_24": 3}
 

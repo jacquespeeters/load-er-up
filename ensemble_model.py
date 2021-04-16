@@ -15,7 +15,11 @@ from sklearn.model_selection import train_test_split
 # from preprocess import preprocess
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
 
 
 class EnsembleModel:
@@ -98,7 +102,8 @@ class EnsembleModel:
         mlflow.start_run()
         for model, target in zip(self.models, self.targets):
             logger.info(f"Train {target}")
-            mask = (~y_learning[target].isna()) & y_learning.operating
+            # & y_learning.operating => aparently we train on this given forum input
+            mask = ~y_learning[target].isna()
             X_learning_tmp = self.get_X(df_learning[mask])
             self.X_cols = list(X_learning_tmp)
             y_learning_tmp = y_learning[mask][target].astype(int)

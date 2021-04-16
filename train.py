@@ -15,7 +15,11 @@ from preprocess import preprocess
 from score import scoring_fn_func
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
 
 # Work around for a SageMaker path issue
 # (see https://github.com/aws/sagemaker-python-sdk/issues/648)

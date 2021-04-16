@@ -11,7 +11,11 @@ import os
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
 
 
 def preprocess(data_file):
@@ -74,7 +78,7 @@ def preprocess(data_file):
     for window in list_window:
         for func in [
             "mean",
-            # "std",
+            "std",
         ]:
             cols_fe = [f"{col}_{func}_{window}" for col in cols]
             # We mostly have missing values, hence min_periods=0
