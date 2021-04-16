@@ -71,7 +71,7 @@ def preprocess(data_file):
     cols = list(df_learning)
 
     # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
-    list_window = [int(60 * 24 * 2 ** i) for i in range(-2, 2)]
+    list_window = [int(60 * 24 * 2 ** i) for i in range(-3, 2)]
     logger.info(f"Rolling windows size (in minutes): {list_window}")
 
     grouped = df_learning.groupby(["machine"])
