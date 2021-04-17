@@ -1,25 +1,27 @@
-"""Unearthed Sound The Alarm Prediction Template"""
-import argparse
-import logging
-from os import getenv
-from os.path import join
+# """Unearthed Sound The Alarm Prediction Template"""
+# import argparse
+# import logging
+# from os import getenv
+# from os.path import join
 
-import numpy as np
-import pandas as pd
+# import numpy as np
+# import pandas as pd
 
-from preprocess import preprocess
-from train import model_fn
+# from preprocess import preprocess
+# from train import model_fn
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-8s %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.INFO,
-)
+# logger = logging.getLogger(__name__)
+# logging.basicConfig(
+#     format="%(asctime)s %(levelname)-8s %(message)s",
+#     datefmt="%Y-%m-%d %H:%M:%S",
+#     level=logging.INFO,
+# )
 
 
 if __name__ == "__main__":
-    """Prediction.
+    """
+    NOT USED IN PRODUCTION
+    Prediction.
 
     The main function is only used by the Unearthed CLI.
 
@@ -27,16 +29,16 @@ if __name__ == "__main__":
     preprocessing and Batch Transform Jobs are used to pass the result of preprocessing
     to the trained model.
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_dir", type=str, default=getenv("SM_MODEL_DIR", "/opt/ml/models")
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default=getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training"),
-    )
-    args, _ = parser.parse_known_args()
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--model_dir", type=str, default=getenv("SM_MODEL_DIR", "/opt/ml/models")
+    # )
+    # parser.add_argument(
+    #     "--data_dir",
+    #     type=str,
+    #     default=getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training"),
+    # )
+    # args, _ = parser.parse_known_args()
 
     # Not used in production (pipeline)
     # # call preprocessing on the data

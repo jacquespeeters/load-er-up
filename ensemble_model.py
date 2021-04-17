@@ -4,7 +4,8 @@ import lightgbm as lgb
 import mlflow
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+
+from score import scoring_fn_func
 
 # How to run Mlflow:
 # > mlflow ui
@@ -25,7 +26,6 @@ logging.basicConfig(
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.models = [lgb.LGBMClassifier(importance_type="gain") for _ in self.targets]
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
@@ -57,6 +57,13 @@ class EnsembleModel:
         print(f"Expected best f-score {round(max(fscore),3)}")
         return preds > best_tresh
 
+    def predict_optim_f1(self, single_machine_pred):
+        for target in self.targets:
+            single_machine_pred[target] = self.expected_optim_f1(
+                single_machine_pred[target]
+            )
+        return single_machine_pred
+
     def format_predictions(self, predictions):
         """Format predictions to be compliant with competition one
 
@@ -87,50 +94,68 @@ class EnsembleModel:
         return predictions
 
     def train(self, df_learning, y_learning):
+        predictions = df_learning[["window", "machine"]].copy()
+        predictions[self.targets] = np.nan
 
-        df_learning["FOLD"] = pd.qcut(df_learning["window"], 3, labels=False)
-
+        # Create folder by combining time and machine split
         N_FOLD = 5
         df_learning["FOLD"] = (
             df_learning["machine"].astype("category").cat.codes
             + pd.qcut(df_learning["window"], N_FOLD, labels=False)
         ).mod(N_FOLD)
 
-        # df_learning[mask].groupby("FOLD").size()
-
         mlflow.set_experiment("training")
         mlflow.start_run()
-        for model, target in zip(self.models, self.targets):
-            logger.info(f"Train {target}")
-            # & y_learning.operating => aparently we train on this given forum input
-            mask = ~y_learning[target].isna()
-            X_learning_tmp = self.get_X(df_learning[mask])
-            self.X_cols = list(X_learning_tmp)
-            y_learning_tmp = y_learning[mask][target].astype(int)
-            # Split should be by machine to mimic private leaderboard
-            is_valid = df_learning[mask]["FOLD"] == 0
-            X_train = X_learning_tmp[~is_valid]
-            y_train = y_learning_tmp[~is_valid]
-            X_valid = X_learning_tmp[is_valid]
-            y_valid = y_learning_tmp[is_valid]
+        X_learning = self.get_X(df_learning)
+        self.X_cols = list(X_learning)
 
-            # X_train, X_valid, y_train, y_valid = train_test_split(
-            #     X_learning_tmp,
-            #     y_learning_tmp,
-            #     test_size=0.20,
-            #     random_state=42,
-            # )
+        models = {}
+        models_FOLD = {}
+        for target in self.targets:
+            for FOLD in range(N_FOLD):
+                logger.info(f"Train {target}, Folder {FOLD}")
+                model = lgb.LGBMClassifier(importance_type="gain")
+                y = y_learning[target]
+                # Split should be by machine to mimic private leaderboard
+                is_valid = df_learning["FOLD"] == FOLD
+                X_train, y_train = X_learning[~is_valid], y[~is_valid]
+                X_valid, y_valid = X_learning[is_valid], y[is_valid]
 
-            model.set_params(**{"min_data_in_leaf": 10000})
+                # & y_learning.operating => aparently we train on this given forum input
+                # mask = ~y_learning[target].isna()
 
-            model.fit(
-                X_train,
-                y_train,
-                eval_set=[(X_train, y_train), (X_valid, y_valid)],
-                early_stopping_rounds=20,
-                # eval_metric="auc",
-                verbose=10,
-            )
+                X_train, y_train = (
+                    X_train[y_train.notnull()],
+                    y_train[y_train.notnull()].astype(int),
+                )
+                X_valid, y_valid = (
+                    X_valid[y_valid.notnull()],
+                    y_valid[y_valid.notnull()].astype(int),
+                )
+
+                model.set_params(
+                    **{
+                        # "min_data_in_leaf": 10000,
+                        "n_estimators": 2000,
+                    }
+                )
+
+                # print("TODO remove this sampling!!! ")
+                # X_train, y_train = X_train.sample(frac=0.1), y_train.sample(frac=0.1)
+
+                model.fit(
+                    X_train,
+                    y_train,
+                    eval_set=[(X_train, y_train), (X_valid, y_valid)],
+                    early_stopping_rounds=20,
+                    verbose=10,
+                )
+                models_FOLD[FOLD] = model
+
+                predictions.loc[is_valid, target] = model.predict_proba(
+                    X_learning[is_valid]
+                )[:, 1]
+            models[target] = models_FOLD
 
             print(
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
@@ -144,28 +169,27 @@ class EnsembleModel:
             mlflow.log_metric(f"best_iteration_{target}", model._best_iteration)
             # mlflow.log_artifact(path.path_feature_importance())
 
+        self.models = models
+
+        predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
+        predictions = self.format_predictions(predictions)
+        targets = self.format_predictions(y_learning)
+        fscore = scoring_fn_func(targets, predictions)
+        mlflow.log_metric("fscore", fscore)
+        logger.info(f"Out-of-fold fscore is {round(fscore, 3)}")
         mlflow.end_run()
+
+        return predictions
 
     def predict(self, df_prod):
         predictions = df_prod[["machine", "window"]].copy()
 
+        X_prod_tmp = self.get_X(df_prod)
         for model, target in zip(self.models, self.targets):
             logger.info(f"Predict {target}")
-            X_prod_tmp = self.get_X(df_prod)
             X_prod_tmp = X_prod_tmp[self.X_cols]
             predictions[target] = model.predict_proba(X_prod_tmp)[:, 1]
 
-        def predict_optim_f1(single_machine_pred):
-            for target in self.targets:
-                single_machine_pred[target] = self.expected_optim_f1(
-                    single_machine_pred[target]
-                )
-            return single_machine_pred
-
-        predictions = predictions.groupby("machine").apply(predict_optim_f1)
+        predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)
-
-        print("predictions.tail(5)")
-        print(predictions.tail(5))
-
         return predictions

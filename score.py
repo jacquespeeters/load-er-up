@@ -33,8 +33,6 @@ def scoring_fn(y, y_pred, weights, error):
         # Ensures the two indices are equal, otherwise throws an exception
         if not y_i.index.equals(y_pred_i.index):
             raise Exception("Indices do not agree!")
-        print(y_i.shape)
-        print(y_pred_i.shape)
         total_weight = sum(weights.values())
         ret = 0.0
         lags = ["y_1", "y_4", "y_12", "y_24"]
