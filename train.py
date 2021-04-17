@@ -52,34 +52,11 @@ def train(args):
 
     my_model = EnsembleModel()
     predictions = my_model.train(df_learning, y_learning)
-    predictions.sample(5)
+    print(predictions.sample(5))
     # save the model to disk
     save_model(my_model, args.model_dir)
 
-    # # TODO - Move this part to EnsembleModel() and add fscore to MLflow
-    # def format_targets(y_learning):
-    #     machines_names = y_learning["machine"].unique().tolist()
-    #     machines_names.sort()
-
-    #     targets = pd.pivot(
-    #         y_learning,
-    #         columns="machine",
-    #         index=["window"],
-    #         values=my_model.targets,
-    #     )
-
-    #     targets.columns = [f"{col[1]}.{col[0]}" for col in targets.columns]
-    #     cols = []
-    #     for machine_name in machines_names:
-    #         for target in my_model.targets:
-    #             cols.append(f"{machine_name}.{target}")
-
-    #     targets = targets.reindex(cols, axis=1)
-    #     targets = targets.reset_index()
-    #     return targets
-
-    # predictions = my_model.predict(df_learning)
-    # targets = format_targets(y_learning)
+    my_model.predict(df_learning)
 
 
 def save_model(model, model_dir):

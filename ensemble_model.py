@@ -110,8 +110,8 @@ class EnsembleModel:
         self.X_cols = list(X_learning)
 
         models = {}
-        models_FOLD = {}
         for target in self.targets:
+            models_FOLD = {}
             for FOLD in range(N_FOLD):
                 logger.info(f"Train {target}, Folder {FOLD}")
                 model = lgb.LGBMClassifier(importance_type="gain")
@@ -155,6 +155,7 @@ class EnsembleModel:
                 predictions.loc[is_valid, target] = model.predict_proba(
                     X_learning[is_valid]
                 )[:, 1]
+
             models[target] = models_FOLD
 
             print(
@@ -182,13 +183,21 @@ class EnsembleModel:
         return predictions
 
     def predict(self, df_prod):
+        N_FOLD = 5
         predictions = df_prod[["machine", "window"]].copy()
+        predictions[self.targets] = 0
 
-        X_prod_tmp = self.get_X(df_prod)
-        for model, target in zip(self.models, self.targets):
+        X_prod_tmp = self.get_X(df_prod)[self.X_cols]
+        for target in self.targets:
             logger.info(f"Predict {target}")
-            X_prod_tmp = X_prod_tmp[self.X_cols]
-            predictions[target] = model.predict_proba(X_prod_tmp)[:, 1]
+            for FOLD in range(N_FOLD):
+                model = self.models[target][FOLD]
+                # tmp = model.predict_proba(X_prod_tmp)[:, 1]
+                # print(tmp)
+                # predictions[f"target_{FOLD}"] = tmp
+                predictions[target] += model.predict_proba(X_prod_tmp)[:, 1] / N_FOLD
+
+        # predictions.sort_values(self.targets[0])
 
         predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)
