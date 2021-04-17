@@ -90,7 +90,7 @@ class EnsembleModel:
 
         df_learning["FOLD"] = pd.qcut(df_learning["window"], 3, labels=False)
 
-        N_FOLD = 3
+        N_FOLD = 5
         df_learning["FOLD"] = (
             df_learning["machine"].astype("category").cat.codes
             + pd.qcut(df_learning["window"], N_FOLD, labels=False)
@@ -128,7 +128,7 @@ class EnsembleModel:
                 y_train,
                 eval_set=[(X_train, y_train), (X_valid, y_valid)],
                 early_stopping_rounds=20,
-                eval_metric="auc",
+                # eval_metric="auc",
                 verbose=10,
             )
 

@@ -18,6 +18,35 @@ logging.basicConfig(
 )
 
 
+def remove_correlated_variables(df_machines, df_learning):
+    # Remove variable mean/max correlated >0.97
+    cols_base = list(df_machines[0])
+    cols_base.remove("machine")
+
+    corr = []
+    for col in cols_base:
+        tmp = df_learning[df_learning[f"{col}_max"].notnull()][
+            [f"{col}_max", f"{col}_mean"]
+        ].corr()
+        tmp = tmp.reset_index().rename(columns={"index": "col1"})
+        tmp = pd.melt(tmp, id_vars=["col1"], var_name="col2")
+        tmp = tmp[tmp["col1"] != tmp["col2"]]
+        tmp = tmp.head(1)
+        corr.append(tmp)
+
+    corr = pd.concat(corr)
+    corr = corr.sort_values("value", ascending=False)
+    to_remove = corr[corr["value"] > 0.97]["col2"].unique()
+    df_learning = df_learning.drop(columns=to_remove)
+
+    # tmp = df_learning.sample(1000).corr()
+    # tmp = tmp.reset_index().rename(columns={'index': 'col1'})
+    # tmp = pd.melt(tmp, id_vars=["col1"], var_name='col2')
+    # tmp = tmp[tmp['col1'] != tmp['col2']]
+    # tmp.sort_values('value', ascending=False).head(10)
+    return df_learning
+
+
 def preprocess(data_file):
     """Apply preprocessing and featurization steps to each file in the data directory.
 
@@ -63,10 +92,6 @@ def preprocess(data_file):
     # generate features
     x_inputs = [_build_x_input(_) for _ in df_machines]
     df_learning = pd.concat(x_inputs)
-
-    # df_learning.isnull().groupby("machine").mean()
-    # df_learning[["y_0_max", "y_0_mean"]].groupby("machine").mean()
-    # df_learning[["y_0_max", "y_0_mean"]].mean()
 
     cols = list(df_learning)
 
@@ -203,11 +228,12 @@ def _build_x_input(df_machine_tmp):
     input_columns = input_columns + ["y_0"]
 
     df_machine_tmp = df_machine_tmp.groupby(["machine", "window"])[input_columns].agg(
-        ["mean", "max"]
+        [
+            "mean",
+            # "max", # Removed to reduce memory footprint
+        ]
     )
     df_machine_tmp.columns = ["_".join(_) for _ in df_machine_tmp.columns]
-    # Strictly identical to y_0_mean
-    df_machine_tmp = df_machine_tmp.drop(columns="y_0_max")
     return df_machine_tmp
 
 
