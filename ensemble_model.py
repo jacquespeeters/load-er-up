@@ -28,40 +28,6 @@ class EnsembleModel:
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
         self.N_FOLD = 5
 
-    def feature_engineering(self, df_learning):
-        cols = list(df_learning)
-        cols.remove("machine")
-        cols.remove("window")
-
-        # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
-        list_window = [int(60 * 24 * 2 ** i) for i in range(-7, 2)]
-        logger.info(f"Rolling windows size (in minutes): {list_window}")
-
-        grouped = df_learning.groupby(["machine"])
-        for window in list_window:
-            for func in [
-                "mean",
-                "std",
-            ]:
-                cols_fe = [f"{col}_{func}_{window}" for col in cols]
-                # We mostly have missing values, hence min_periods=0
-                df_learning[cols_fe] = grouped[cols].transform(
-                    lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
-                )
-
-        # Drop useless columns
-        df_learning = df_learning.drop(columns=cols)
-
-        # Yes concat work it is correctly aligned
-        # nrow_before = df_learning.shape[0]
-        # df_learning = pd.concat([df_learning, df_y], axis=1)
-        # assert df_learning.shape[0] == nrow_before
-        df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
-        df_learning["window_hour"] = df_learning["window"].dt.hour
-        df_learning["window_minute"] = df_learning["window"].dt.minute
-        logger.info(f"df_learning.shape:  {df_learning.shape}")
-        return df_learning
-
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
         return X
@@ -130,8 +96,6 @@ class EnsembleModel:
         return predictions
 
     def train(self, df_learning, y_learning):
-        df_learning = self.feature_engineering(df_learning)
-
         predictions = df_learning[["window", "machine"]].copy()
         predictions[self.targets] = np.nan
 
@@ -147,6 +111,8 @@ class EnsembleModel:
         self.X_cols = list(X_learning)
 
         models = {}
+        train_loss = []
+        valid_loss = []
         for target in self.targets:
             models_FOLD = {}
             model_best_score_training = []
@@ -206,9 +172,11 @@ class EnsembleModel:
             print(
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
             )
+            train_loss.append(pd.Series(model_best_score_training).mean())
             mlflow.log_metric(
                 f"train_loss_{target}", pd.Series(model_best_score_training).mean()
             )
+            valid_loss.append(pd.Series(model_best_score_valid).mean())
             mlflow.log_metric(
                 f"valid_loss_{target}", pd.Series(model_best_score_valid).mean()
             )
@@ -217,10 +185,15 @@ class EnsembleModel:
 
         self.models = models
 
+        train_loss = pd.Series(train_loss).mean()
+        valid_loss = pd.Series(valid_loss).mean()
+
         predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)
         targets = self.format_predictions(y_learning)
         fscore = scoring_fn_func(targets, predictions)
+        mlflow.log_metric("train_loss", train_loss)
+        mlflow.log_metric("valid_loss", valid_loss)
         mlflow.log_metric("fscore", fscore)
         logger.info(f"Out-of-fold fscore is {round(fscore, 3)}")
         mlflow.end_run()
@@ -228,8 +201,6 @@ class EnsembleModel:
         return predictions
 
     def predict(self, df_prod):
-        df_prod = self.feature_engineering(df_prod)
-
         predictions = df_prod[["machine", "window"]].copy()
         predictions[self.targets] = 0
 

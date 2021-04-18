@@ -47,6 +47,41 @@ def remove_correlated_variables(df_machines, df_learning):
     return df_learning
 
 
+def feature_engineering(df_learning):
+    cols = list(df_learning)
+    cols.remove("machine")
+    cols.remove("window")
+
+    # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
+    list_window = [int(60 * 24 * 2 ** i) for i in range(-7, 2)]
+    logger.info(f"Rolling windows size (in minutes): {list_window}")
+
+    grouped = df_learning.groupby(["machine"])
+    for window in list_window:
+        for func in [
+            "mean",
+            "std",
+        ]:
+            cols_fe = [f"{col}_{func}_{window}" for col in cols]
+            # We mostly have missing values, hence min_periods=0
+            df_learning[cols_fe] = grouped[cols].transform(
+                lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
+            )
+
+    # Drop useless columns
+    df_learning = df_learning.drop(columns=cols)
+
+    # Yes concat work it is correctly aligned
+    # nrow_before = df_learning.shape[0]
+    # df_learning = pd.concat([df_learning, df_y], axis=1)
+    # assert df_learning.shape[0] == nrow_before
+    df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
+    df_learning["window_hour"] = df_learning["window"].dt.hour
+    df_learning["window_minute"] = df_learning["window"].dt.minute
+    logger.info(f"df_learning.shape:  {df_learning.shape}")
+    return df_learning
+
+
 def preprocess(data_file):
     """Apply preprocessing and featurization steps to each file in the data directory.
 
@@ -95,6 +130,7 @@ def preprocess(data_file):
     x_inputs = [_build_x_input(_) for _ in df_machines]
     df_learning = pd.concat(x_inputs)
     df_learning = df_learning.reset_index()
+    df_learning = feature_engineering(df_learning)
 
     return df_learning, y_learning
 
