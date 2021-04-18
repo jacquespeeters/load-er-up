@@ -52,8 +52,11 @@ def feature_engineering(df_learning):
     cols.remove("machine")
     cols.remove("window")
 
-    # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
-    list_window = [int(60 * 24 * 2 ** i) for i in range(-7, 2)]
+    # Avoid memory errors ...
+    list_window = [int(60 * 24 * 2 ** i) for i in range(-7, -5)] + [
+        int(60 * 24 * 2 ** i) for i in range(-3, 2)
+    ]
+
     logger.info(f"Rolling windows size (in minutes): {list_window}")
 
     grouped = df_learning.groupby(["machine"])

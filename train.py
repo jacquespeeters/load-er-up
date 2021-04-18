@@ -45,12 +45,29 @@ def train(args):
     else:
         fname = "public.csv.gz"
 
-    # %%time
     df_learning, y_learning = preprocess(data_file=join(args.data_dir, fname))
     # 4min20sec in local, we should avoid this when dev
 
     my_model = EnsembleModel()
     predictions = my_model.train(df_learning, y_learning)
+    # importance = my_model.get_feature_importance()
+    # importance["isdigit"] = importance["feature"].str.split("_").str.len()
+    # isdigit = importance["feature"].str.split("_").str[-1].str.isdigit()
+    # importance = importance[isdigit]
+    # importance["feature_root"] = (
+    #     importance["feature"].str.split("_").str[:-3].str.join("_")
+    # )
+    # N_model = my_model.N_FOLD * len(my_model.targets)
+    # importance_agg = (
+    #     importance.groupby("feature_root")["importance"].sum() / N_model
+    # ).reset_index()
+    # importance_agg = importance_agg.sort_values("importance")
+
+    # importance = importance[["feature", "feature_root"]].merge(importance_agg)
+    # list(importance[importance["importance"] < 0.5]["feature_root"].unique())
+    # noisy_features = importance[importance["importance"] < 1]["feature"].unique()
+    # predictions = my_model.train(df_learning.drop(columns=noisy_features), y_learning)
+
     print(predictions.sample(5))
     # save the model to disk
     save_model(my_model, args.model_dir)

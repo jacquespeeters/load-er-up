@@ -26,11 +26,28 @@ logging.basicConfig(
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.N_FOLD = 5
+        self.N_FOLD = 2
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
         return X
+
+    def get_importance_lgb(self, model_gbm, X_cols=None):
+        importance = pd.DataFrame()
+        if X_cols is None:
+            importance["feature"] = model_gbm.feature_name_
+        else:
+            importance["feature"] = X_cols
+        importance["importance"] = model_gbm.feature_importances_
+        importance["importance"] = (
+            importance["importance"] / importance["importance"].replace(np.inf, 0).sum()
+        )
+        importance["importance"] = importance["importance"] * 100
+        importance["importance_rank"] = importance["importance"].rank(
+            ascending=False
+        )  # .astype(int)
+        importance = importance.sort_values("importance_rank").round(2)
+        return importance
 
     def expected_optim_f1(self, preds):
         """Optimize expected threshold
@@ -216,3 +233,14 @@ class EnsembleModel:
         predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)
         return predictions
+
+    def get_feature_importance(self):
+        importance = []
+        for target in self.targets:
+            for FOLD in range(self.N_FOLD):
+                model = self.models[target][FOLD]
+                importance_tmp = self.get_importance_lgb(model)
+                importance_tmp["FOLD"] = FOLD
+                importance_tmp["target"] = target
+                importance.append(importance_tmp)
+        return pd.concat(importance)
