@@ -26,7 +26,7 @@ logging.basicConfig(
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
-        self.N_FOLD = 2
+        self.N_FOLD = 5
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
