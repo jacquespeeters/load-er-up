@@ -47,7 +47,6 @@ def train(args):
 
     # %%time
     df_learning, y_learning = preprocess(data_file=join(args.data_dir, fname))
-
     # 4min20sec in local, we should avoid this when dev
 
     my_model = EnsembleModel()
@@ -112,15 +111,15 @@ if __name__ == "__main__":
 
     if os.path.exists("./data/public"):
         default_model_dir = "./data/public"
+        default_data_dir = "./data/public"
+        default_input = "/opt/ml/processing/input/public/public.csv.gz"
     else:
         default_model_dir = getenv("SM_MODEL_DIR", "/opt/ml/models")
-
-    if os.path.exists("./data/public"):
-        default_data_dir = "./data/public"
-    else:
         default_data_dir = getenv("SM_CHANNEL_TRAINING", "/opt/ml/input/data/training")
+        default_input = "./data/public/public.parquet"
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=str, default=default_input)
     parser.add_argument("--model_dir", type=str, default=default_model_dir)
     parser.add_argument("--data_dir", type=str, default=default_data_dir)
     args, _ = parser.parse_known_args()

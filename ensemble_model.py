@@ -26,6 +26,41 @@ logging.basicConfig(
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
+        self.N_FOLD = 5
+
+    def feature_engineering(self, df_learning):
+        cols = list(df_learning)
+        cols.remove("machine")
+        cols.remove("window")
+
+        # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
+        list_window = [int(60 * 24 * 2 ** i) for i in range(-7, 2)]
+        logger.info(f"Rolling windows size (in minutes): {list_window}")
+
+        grouped = df_learning.groupby(["machine"])
+        for window in list_window:
+            for func in [
+                "mean",
+                "std",
+            ]:
+                cols_fe = [f"{col}_{func}_{window}" for col in cols]
+                # We mostly have missing values, hence min_periods=0
+                df_learning[cols_fe] = grouped[cols].transform(
+                    lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
+                )
+
+        # Drop useless columns
+        df_learning = df_learning.drop(columns=cols)
+
+        # Yes concat work it is correctly aligned
+        # nrow_before = df_learning.shape[0]
+        # df_learning = pd.concat([df_learning, df_y], axis=1)
+        # assert df_learning.shape[0] == nrow_before
+        df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
+        df_learning["window_hour"] = df_learning["window"].dt.hour
+        df_learning["window_minute"] = df_learning["window"].dt.minute
+        logger.info(f"df_learning.shape:  {df_learning.shape}")
+        return df_learning
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
@@ -94,15 +129,16 @@ class EnsembleModel:
         return predictions
 
     def train(self, df_learning, y_learning):
+        df_learning = self.feature_engineering(df_learning)
+
         predictions = df_learning[["window", "machine"]].copy()
         predictions[self.targets] = np.nan
 
         # Create folder by combining time and machine split
-        N_FOLD = 5
         df_learning["FOLD"] = (
             df_learning["machine"].astype("category").cat.codes
-            + pd.qcut(df_learning["window"], N_FOLD, labels=False)
-        ).mod(N_FOLD)
+            + pd.qcut(df_learning["window"], self.N_FOLD, labels=False)
+        ).mod(self.N_FOLD)
 
         mlflow.set_experiment("training")
         mlflow.start_run()
@@ -112,7 +148,9 @@ class EnsembleModel:
         models = {}
         for target in self.targets:
             models_FOLD = {}
-            for FOLD in range(N_FOLD):
+            model_best_score_training = []
+            model_best_score_valid = []
+            for FOLD in range(self.N_FOLD):
                 logger.info(f"Train {target}, Folder {FOLD}")
                 model = lgb.LGBMClassifier(importance_type="gain")
                 y = y_learning[target]
@@ -155,6 +193,12 @@ class EnsembleModel:
                 predictions.loc[is_valid, target] = model.predict_proba(
                     X_learning[is_valid]
                 )[:, 1]
+                model_best_score_training.append(
+                    model.best_score_["training"]["binary_logloss"]
+                )
+                model_best_score_valid.append(
+                    model.best_score_["valid_1"]["binary_logloss"]
+                )
 
             models[target] = models_FOLD
 
@@ -162,10 +206,10 @@ class EnsembleModel:
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
             )
             mlflow.log_metric(
-                f"train_loss_{target}", model.best_score_["training"]["binary_logloss"]
+                f"train_loss_{target}", pd.Series(model_best_score_training).mean()
             )
             mlflow.log_metric(
-                f"valid_loss_{target}", model.best_score_["valid_1"]["binary_logloss"]
+                f"valid_loss_{target}", pd.Series(model_best_score_valid).mean()
             )
             mlflow.log_metric(f"best_iteration_{target}", model._best_iteration)
             # mlflow.log_artifact(path.path_feature_importance())
@@ -183,21 +227,19 @@ class EnsembleModel:
         return predictions
 
     def predict(self, df_prod):
-        N_FOLD = 5
+        df_prod = self.feature_engineering(df_prod)
+
         predictions = df_prod[["machine", "window"]].copy()
         predictions[self.targets] = 0
 
         X_prod_tmp = self.get_X(df_prod)[self.X_cols]
         for target in self.targets:
             logger.info(f"Predict {target}")
-            for FOLD in range(N_FOLD):
+            for FOLD in range(self.N_FOLD):
                 model = self.models[target][FOLD]
-                # tmp = model.predict_proba(X_prod_tmp)[:, 1]
-                # print(tmp)
-                # predictions[f"target_{FOLD}"] = tmp
-                predictions[target] += model.predict_proba(X_prod_tmp)[:, 1] / N_FOLD
-
-        # predictions.sort_values(self.targets[0])
+                predictions[target] += (
+                    model.predict_proba(X_prod_tmp)[:, 1] / self.N_FOLD
+                )
 
         predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)

@@ -70,7 +70,7 @@ def preprocess(data_file):
         # If local and file don't exists yet
         df.to_parquet("./data/public/public.parquet")
 
-    logger.info(f"running preprocess on {df.shape}")
+    logger.info(f"running preprocess on {data_file} has shape of {df.shape}")
     # (4030366, 1009)
 
     # Cast string binary to float
@@ -83,53 +83,18 @@ def preprocess(data_file):
     ]
     df[cols_binary] = df[cols_binary].replace("On", "1").replace("Off", 0).astype(float)
 
-    logger.info(f"data read from {data_file} has shape of {df.shape}")
-
     # split data into a list of dataframes, one for each machine
     df = df.sort_values("timestamp").reset_index(drop=True)
     df_machines = split_by_machine(df)
-
-    # generate features
-    x_inputs = [_build_x_input(_) for _ in df_machines]
-    df_learning = pd.concat(x_inputs)
-
-    cols = list(df_learning)
-
-    # [int(60 * 24 * 4 ** i) for i in range(-2, 2)]
-    list_window = [int(60 * 24 * 2 ** i) for i in range(-6, 2)]
-    logger.info(f"Rolling windows size (in minutes): {list_window}")
-
-    grouped = df_learning.groupby(["machine"])
-    for window in list_window:
-        for func in [
-            "mean",
-            "std",
-        ]:
-            cols_fe = [f"{col}_{func}_{window}" for col in cols]
-            # We mostly have missing values, hence min_periods=0
-            df_learning[cols_fe] = grouped[cols].transform(
-                lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
-            )
-
-    # Drop useless columns
-    df_learning = df_learning.drop(columns=cols)
-
     # generate targets
     actuals = [generate_actuals(df_machine) for df_machine in df_machines]
     y_learning = pd.concat(actuals)
     y_learning = y_learning.reset_index()
 
-    # Yes concat work it is correctly aligned
-    # nrow_before = df_learning.shape[0]
-    # df_learning = pd.concat([df_learning, df_y], axis=1)
-    # assert df_learning.shape[0] == nrow_before
-
+    # generate features
+    x_inputs = [_build_x_input(_) for _ in df_machines]
+    df_learning = pd.concat(x_inputs)
     df_learning = df_learning.reset_index()
-    df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
-    df_learning["window_hour"] = df_learning["window"].dt.hour
-    df_learning["window_minute"] = df_learning["window"].dt.minute
-
-    logger.info(f"df_learning.shape:  {df_learning.shape}")
 
     return df_learning, y_learning
 
