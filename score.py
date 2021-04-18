@@ -131,6 +131,10 @@ if __name__ == "__main__":
 
     score = scoring_fn(targets, predictions, weights, f1_error)
 
+    print("score", round(score, 3))
+
     # write to the output location
     with open(args.output, "w") as f:
         f.write(str(score))
+
+    print("End of scoring")
