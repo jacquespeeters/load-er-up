@@ -26,6 +26,7 @@ logging.basicConfig(
 class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
+        self.N_BAGGING = 4
         self.N_FOLD = 5
 
     def get_X(self, df):
@@ -117,11 +118,7 @@ class EnsembleModel:
         predictions[self.targets] = np.nan
 
         # Create folder by combining time and machine split
-        df_learning["FOLD"] = (
-            df_learning["machine"].astype("category").cat.codes
-            + pd.qcut(df_learning["window"], self.N_FOLD, labels=False)
-        ).mod(self.N_FOLD)
-
+        N_MACHINES = df_learning["machine"].nunique()
         mlflow.set_experiment("training")
         mlflow.start_run()
         X_learning = self.get_X(df_learning)
@@ -131,60 +128,72 @@ class EnsembleModel:
         train_loss = []
         valid_loss = []
         for target in self.targets:
-            models_FOLD = {}
             model_best_score_training = []
             model_best_score_valid = []
-            for FOLD in range(self.N_FOLD):
-                logger.info(f"Train {target}, Folder {FOLD}")
-                model = lgb.LGBMClassifier(importance_type="gain")
-                y = y_learning[target]
-                # Split should be by machine to mimic private leaderboard
-                is_valid = df_learning["FOLD"] == FOLD
-                X_train, y_train = X_learning[~is_valid], y[~is_valid]
-                X_valid, y_valid = X_learning[is_valid], y[is_valid]
-
-                # & y_learning.operating => aparently we train on this given forum input
-                # mask = ~y_learning[target].isna()
-
-                X_train, y_train = (
-                    X_train[y_train.notnull()],
-                    y_train[y_train.notnull()].astype(int),
+            models_BAGGING = {}
+            for BAGGING in range(self.N_BAGGING):
+                models_FOLD = {}
+                np.random.seed(BAGGING)
+                code_machine = np.random.choice(
+                    range(N_MACHINES), N_MACHINES, replace=False
                 )
-                X_valid, y_valid = (
-                    X_valid[y_valid.notnull()],
-                    y_valid[y_valid.notnull()].astype(int),
-                )
+                code_machine = dict(zip(df_learning["machine"].unique(), code_machine))
 
-                model.set_params(
-                    **{
-                        # "min_data_in_leaf": 10000,
-                        "n_estimators": 2000,
-                    }
-                )
+                df_learning["FOLD"] = (
+                    df_learning["machine"].map(code_machine)
+                    + pd.qcut(df_learning["window"], self.N_FOLD, labels=False)
+                ).mod(self.N_FOLD)
 
-                # print("TODO remove this sampling!!! ")
-                # X_train, y_train = X_train.sample(frac=0.1), y_train.sample(frac=0.1)
+                for FOLD in range(self.N_FOLD):
+                    logger.info(f"Train {target}, Bagging {BAGGING}, Folder {FOLD}")
+                    model = lgb.LGBMClassifier(importance_type="gain")
+                    y = y_learning[target]
+                    # Split should be by machine to mimic private leaderboard
+                    is_valid = df_learning["FOLD"] == FOLD
+                    X_train, y_train = X_learning[~is_valid], y[~is_valid]
+                    X_valid, y_valid = X_learning[is_valid], y[is_valid]
 
-                model.fit(
-                    X_train,
-                    y_train,
-                    eval_set=[(X_train, y_train), (X_valid, y_valid)],
-                    early_stopping_rounds=20,
-                    verbose=10,
-                )
-                models_FOLD[FOLD] = model
+                    # & y_learning.operating => aparently we train on this given forum input # noqa
+                    # mask = ~y_learning[target].isna()
 
-                predictions.loc[is_valid, target] = model.predict_proba(
-                    X_learning[is_valid]
-                )[:, 1]
-                model_best_score_training.append(
-                    model.best_score_["training"]["binary_logloss"]
-                )
-                model_best_score_valid.append(
-                    model.best_score_["valid_1"]["binary_logloss"]
-                )
+                    X_train, y_train = (
+                        X_train[y_train.notnull()],
+                        y_train[y_train.notnull()].astype(int),
+                    )
+                    X_valid, y_valid = (
+                        X_valid[y_valid.notnull()],
+                        y_valid[y_valid.notnull()].astype(int),
+                    )
 
-            models[target] = models_FOLD
+                    model.set_params(
+                        **{
+                            # "min_data_in_leaf": 10000,
+                            "n_estimators": 2000,
+                        }
+                    )
+
+                    model.fit(
+                        X_train,
+                        y_train,
+                        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+                        early_stopping_rounds=20,
+                        verbose=10,
+                    )
+
+                    predictions.loc[is_valid, target] += (
+                        model.predict_proba(X_learning[is_valid])[:, 1] / self.N_BAGGING
+                    )
+                    model_best_score_training.append(
+                        model.best_score_["training"]["binary_logloss"]
+                    )
+                    model_best_score_valid.append(
+                        model.best_score_["valid_1"]["binary_logloss"]
+                    )
+                    models_FOLD[FOLD] = model
+
+                models_BAGGING[BAGGING] = models_FOLD
+
+            models[target] = models_BAGGING
 
             print(
                 lgb.plot_importance(model, importance_type="gain", max_num_features=20)
@@ -222,13 +231,15 @@ class EnsembleModel:
         predictions[self.targets] = 0
 
         X_prod_tmp = self.get_X(df_prod)[self.X_cols]
+        N_MODEL = self.N_FOLD * self.N_BAGGING
         for target in self.targets:
             logger.info(f"Predict {target}")
-            for FOLD in range(self.N_FOLD):
-                model = self.models[target][FOLD]
-                predictions[target] += (
-                    model.predict_proba(X_prod_tmp)[:, 1] / self.N_FOLD
-                )
+            for BAGGING in range(self.N_BAGGING):
+                for FOLD in range(self.N_FOLD):
+                    model = self.models[target][BAGGING][FOLD]
+                    predictions[target] += (
+                        model.predict_proba(X_prod_tmp)[:, 1] / N_MODEL
+                    )
 
         predictions = predictions.groupby("machine").apply(self.predict_optim_f1)
         predictions = self.format_predictions(predictions)
@@ -237,10 +248,11 @@ class EnsembleModel:
     def get_feature_importance(self):
         importance = []
         for target in self.targets:
-            for FOLD in range(self.N_FOLD):
-                model = self.models[target][FOLD]
-                importance_tmp = self.get_importance_lgb(model)
-                importance_tmp["FOLD"] = FOLD
-                importance_tmp["target"] = target
-                importance.append(importance_tmp)
+            for BAGGING in range(self.N_BAGGING):
+                for FOLD in range(self.N_FOLD):
+                    model = self.models[target][FOLD]
+                    importance_tmp = self.get_importance_lgb(model)
+                    importance_tmp["FOLD"] = FOLD
+                    importance_tmp["target"] = target
+                    importance.append(importance_tmp)
         return pd.concat(importance)
