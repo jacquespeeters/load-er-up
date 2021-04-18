@@ -88,8 +88,9 @@ class EnsembleModel:
             fscore.append(tmp_fscore)
 
         best_tresh = threshold[np.argmax(fscore)]
-        print(f"Expected best threshold is {best_tresh.round(3)}")
-        print(f"Expected best f-score {round(max(fscore),3)}")
+        print(
+            f"Expected best threshold is {best_tresh.round(3)}, Expected best f-score {round(max(fscore),3)}"  # noqa
+        )
         return preds > best_tresh
 
     def predict_optim_f1(self, single_machine_pred):
