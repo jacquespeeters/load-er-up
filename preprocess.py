@@ -71,7 +71,7 @@ def feature_engineering(df_learning):
                 lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
             )
 
-    # Last minutes fe for y_1 target    
+    # Last minutes fe for y_1 target
     for window in [1]:
         for func in [
             "mean",
@@ -79,7 +79,7 @@ def feature_engineering(df_learning):
         ]:
             cols_fe = [f"{col}_{func}_{window}" for col in ["y_0"]]
             # We mostly have missing values, hence min_periods=0
-            df_learning[cols_fe] = grouped[cols].transform(
+            df_learning[cols_fe] = grouped[["y_0"]].transform(
                 lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
             )
 
