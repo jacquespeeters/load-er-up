@@ -167,7 +167,7 @@ class EnsembleModel:
 
                     model.set_params(
                         **{
-                            # "min_data_in_leaf": 10000,
+                            "min_data_in_leaf": int(X_train.shape[0] / 100),
                             "n_estimators": 2000,
                         }
                     )
