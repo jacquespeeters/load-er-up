@@ -196,7 +196,8 @@ def generate_actuals(df_machine):
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
         # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
-        .assign(y_0=lambda _: _["operating"])  # & _["performing"])
+        # .assign(y_0=lambda _: _["operating"])  # & _["performing"])
+        .assign(y_0=lambda _: _["operating"] & _["performing"])
         .groupby(["machine", "window"])[["operating", "performing", "y_0"]]
         .max()
         .assign(y_1=lambda _: _["y_0"].shift(periods=-1 * 60))
@@ -211,7 +212,8 @@ def _build_x_input(df_machine_tmp):
     input_columns = df_machine_tmp.columns.values.tolist()
     # Aggregate data at minute granularity
     df_machine_tmp["window"] = df_machine_tmp.index.floor("min")
-    df_machine_tmp["y_0"] = (
+    cols_target = ["operating", "performing", "y_0"]
+    df_machine_tmp[cols_target] = (
         df_machine_tmp.assign(
             operating=lambda _: (_["AccelPedalPos1"] > 98)
             & (_["EngSpeed"] > 1800)
@@ -223,13 +225,14 @@ def _build_x_input(df_machine_tmp):
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
         # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
-        .assign(y_0=lambda _: _["operating"])  # & _["performing"])
-        .groupby(["machine", "window"])[["y_0"]]
+        # .assign(y_0=lambda _: _["operating"])  # & _["performing"])
+        .assign(y_0=lambda _: _["operating"] & _["performing"])
+        .groupby(["machine", "window"])[cols_target]
         .transform("max")
         .astype(int)
     )
 
-    input_columns = input_columns + ["y_0"]
+    input_columns = input_columns + cols_target
 
     df_machine_tmp = df_machine_tmp.groupby(["machine", "window"])[input_columns].agg(
         [
