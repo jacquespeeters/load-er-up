@@ -71,6 +71,18 @@ def feature_engineering(df_learning):
                 lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
             )
 
+    # Last minutes fe for y_1 target    
+    for window in [1]:
+        for func in [
+            "mean",
+            "std",
+        ]:
+            cols_fe = [f"{col}_{func}_{window}" for col in ["y_0"]]
+            # We mostly have missing values, hence min_periods=0
+            df_learning[cols_fe] = grouped[cols].transform(
+                lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
+            )
+
     # Drop useless columns
     df_learning = df_learning.drop(columns=cols)
 

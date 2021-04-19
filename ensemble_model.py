@@ -115,7 +115,7 @@ class EnsembleModel:
 
     def train(self, df_learning, y_learning):
         predictions = df_learning[["window", "machine"]].copy()
-        predictions[self.targets] = np.nan
+        predictions[self.targets] = 0
 
         # Create folder by combining time and machine split
         N_MACHINES = df_learning["machine"].nunique()
