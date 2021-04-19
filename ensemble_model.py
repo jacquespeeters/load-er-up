@@ -27,7 +27,7 @@ class EnsembleModel:
     def __init__(self):
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
         self.N_BAGGING = 4
-        self.N_FOLD = 5
+        self.N_FOLD = 3
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")

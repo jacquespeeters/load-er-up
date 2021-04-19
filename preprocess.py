@@ -75,11 +75,10 @@ def feature_engineering(df_learning):
     for window in [1]:
         for func in [
             "mean",
-            "std",
         ]:
-            cols_fe = [f"{col}_{func}_{window}" for col in ["y_0"]]
+            cols_fe = [f"{col}_{func}_{window}" for col in ["y_0_mean"]]
             # We mostly have missing values, hence min_periods=0
-            df_learning[cols_fe] = grouped[["y_0"]].transform(
+            df_learning[cols_fe] = grouped[["y_0_mean"]].transform(
                 lambda x: x.rolling(window, min_periods=1).agg(f"{func}")
             )
 
