@@ -82,7 +82,7 @@ def preprocess(data_file: str) -> (pd.DataFrame, pd.Series):
     Returns:
         pd.DataFrame, pd.Series: df_learning, y_learning
     """
-    logger.info(f"running preprocess on {data_file}")
+    logger.info(f"Running preprocess on {data_file}")
 
     # read the data file
     _, file_extension = os.path.splitext(data_file)
@@ -101,7 +101,7 @@ def preprocess(data_file: str) -> (pd.DataFrame, pd.Series):
         # If local and file don't exists yet
         df.to_parquet("./data/public/public.parquet")
 
-    logger.info(f"running preprocess on {data_file} has shape of {df.shape}")
+    logger.info(f"df.shape: {df.shape}")
 
     # Cast string binary to float
     cols_binary = [
