@@ -18,36 +18,15 @@ logging.basicConfig(
 )
 
 
-def remove_correlated_variables(df_machines, df_learning):
-    # Remove variable mean/max correlated >0.97
-    cols_base = list(df_machines[0])
-    cols_base.remove("machine")
+def feature_engineering(df_learning: pd.DataFrame) -> pd.DataFrame:
+    """Feature engineering
 
-    corr = []
-    for col in cols_base:
-        tmp = df_learning[df_learning[f"{col}_max"].notnull()][
-            [f"{col}_max", f"{col}_mean"]
-        ].corr()
-        tmp = tmp.reset_index().rename(columns={"index": "col1"})
-        tmp = pd.melt(tmp, id_vars=["col1"], var_name="col2")
-        tmp = tmp[tmp["col1"] != tmp["col2"]]
-        tmp = tmp.head(1)
-        corr.append(tmp)
+    Args:
+        df_learning (pd.DataFrame): df_learning
 
-    corr = pd.concat(corr)
-    corr = corr.sort_values("value", ascending=False)
-    to_remove = corr[corr["value"] > 0.97]["col2"].unique()
-    df_learning = df_learning.drop(columns=to_remove)
-
-    # tmp = df_learning.sample(1000).corr()
-    # tmp = tmp.reset_index().rename(columns={'index': 'col1'})
-    # tmp = pd.melt(tmp, id_vars=["col1"], var_name='col2')
-    # tmp = tmp[tmp['col1'] != tmp['col2']]
-    # tmp.sort_values('value', ascending=False).head(10)
-    return df_learning
-
-
-def feature_engineering(df_learning):
+    Returns:
+        pd.DataFrame: df_learning
+    """
     cols = list(df_learning)
     cols.remove("machine")
     cols.remove("window")
@@ -85,10 +64,6 @@ def feature_engineering(df_learning):
     # Drop useless columns
     df_learning = df_learning.drop(columns=cols)
 
-    # Yes concat work it is correctly aligned
-    # nrow_before = df_learning.shape[0]
-    # df_learning = pd.concat([df_learning, df_y], axis=1)
-    # assert df_learning.shape[0] == nrow_before
     df_learning["window_dayofweek"] = df_learning["window"].dt.dayofweek
     df_learning["window_hour"] = df_learning["window"].dt.hour
     df_learning["window_minute"] = df_learning["window"].dt.minute
@@ -96,10 +71,16 @@ def feature_engineering(df_learning):
     return df_learning
 
 
-def preprocess(data_file):
+def preprocess(data_file: str) -> (pd.DataFrame, pd.Series):
     """Apply preprocessing and featurization steps to each file in the data directory.
 
     Your preprocessing and feature generation goes here.
+
+    Args:
+        data_file (str): path of data_file
+
+    Returns:
+        pd.DataFrame, pd.Series: df_learning, y_learning
     """
     logger.info(f"running preprocess on {data_file}")
 
@@ -116,11 +97,11 @@ def preprocess(data_file):
     if (os.path.exists("./data/public")) and (
         not os.path.exists("./data/public/public.parquet")
     ):
+        # speedup local iteration by creating a parquet file
         # If local and file don't exists yet
         df.to_parquet("./data/public/public.parquet")
 
     logger.info(f"running preprocess on {data_file} has shape of {df.shape}")
-    # (4030366, 1009)
 
     # Cast string binary to float
     cols_binary = [
@@ -149,14 +130,14 @@ def preprocess(data_file):
     return df_learning, y_learning
 
 
-def split_by_machine(df):
-    """Creates one dataframe by machine with machine as column (wide to long)
+def split_by_machine(df: pd.DataFrame) -> pd.DataFrame:
+    """Creates one dataframe by machine with machine as column (from wide to long)
 
     Args:
-        df ([type]): [description]
+        df ([pd.DataFrame]): Initial dataset at wide format
 
     Returns:
-        [type]: [description]
+        [pd.DataFrame]: dataset at long format with machine as key
     """
 
     df = (
@@ -193,7 +174,9 @@ def split_by_machine(df):
 
 
 def generate_actuals(df_machine):
-    """df_machine is the dataframe for one machine"""
+    """df_machine is the dataframe for one machine
+    Generate the targets
+    """
     return (
         df_machine.assign(window=lambda _: _.index.floor("min"))
         .assign(
@@ -206,7 +189,7 @@ def generate_actuals(df_machine):
         # right now. Important to do this *before* aggregating,
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
-        # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
+        # see the discussion here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
         .assign(y_0=lambda _: _["operating"])  # & _["performing"])
         # .assign(y_0=lambda _: _["operating"] & _["performing"])
         .groupby(["machine", "window"])[["operating", "performing", "y_0"]]
@@ -218,11 +201,21 @@ def generate_actuals(df_machine):
     )
 
 
-def _build_x_input(df_machine_tmp):
+def _build_x_input(df_machine_tmp: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate data from seconds to minutes by making average
+
+    Args:
+        df_machine_tmp (pd.DataFrame): inputs at seconds granularity
+
+    Returns:
+        pd.DataFrame: aggregated data at minute granularity
+    """
     df_machine_tmp = df_machine_tmp.copy()
     input_columns = df_machine_tmp.columns.values.tolist()
     # Aggregate data at minute granularity
     df_machine_tmp["window"] = df_machine_tmp.index.floor("min")
+
+    # Recreate targets columns to target_encode them later
     cols_target = ["operating", "performing", "y_0"]
     df_machine_tmp[cols_target] = (
         df_machine_tmp.assign(
@@ -235,7 +228,7 @@ def _build_x_input(df_machine_tmp):
         # right now. Important to do this *before* aggregating,
         # as otherwise it might be operating and performing within
         # the same minute, but not necessarily at the same time
-        # see the drama here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
+        # see the discussion here https://unearthed.solutions/u/competitions/96/forum#/question/897a06c1-34d1-4b1f-a016-464ee81111fc # noqa
         .assign(y_0=lambda _: _["operating"])  # & _["performing"])
         # .assign(y_0=lambda _: _["operating"] & _["performing"])
         .groupby(["machine", "window"])[cols_target]

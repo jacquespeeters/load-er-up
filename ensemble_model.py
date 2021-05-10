@@ -25,20 +25,30 @@ logging.basicConfig(
 
 class EnsembleModel:
     def __init__(self):
+        # Our targets
         self.targets = ["y_1", "y_4", "y_12", "y_24"]
+        # Number of bagging rounds, the higher the more stable
         self.N_BAGGING = 4
+        # Number of fold for the time-split cross-validation
         self.N_FOLD = 3
+
+        # Number of model trained is len(targets) * N_BAGGING * N_FOLD, here 36
 
     def get_X(self, df):
         X = df.drop(columns=["machine", "window", "FOLD"], errors="ignore")
         return X
 
-    def get_importance_lgb(self, model_gbm, X_cols=None):
+    def get_importance_lgb(self, model_gbm) -> pd.DataFrame:
+        """Feature importance of a lgb model
+
+        Args:
+            model_gbm ([type]): a lgb model
+
+        Returns:
+            pd.DataFrame: Feature importance
+        """
         importance = pd.DataFrame()
-        if X_cols is None:
-            importance["feature"] = model_gbm.feature_name_
-        else:
-            importance["feature"] = X_cols
+        importance["feature"] = model_gbm.feature_name_
         importance["importance"] = model_gbm.feature_importances_
         importance["importance"] = (
             importance["importance"] / importance["importance"].replace(np.inf, 0).sum()
@@ -50,14 +60,14 @@ class EnsembleModel:
         importance = importance.sort_values("importance_rank").round(2)
         return importance
 
-    def expected_optim_f1(self, preds):
-        """Optimize expected threshold
+    def expected_optim_f1(self, preds: pd.Series) -> pd.Series:
+        """Optimize threshold based on expected f-score for a given prediction serie
 
         Args:
-            preds ([type]): [description]
+            preds (pd.Series): predictions
 
         Returns:
-            [type]: boolean preds given best expected threshold
+            pd.Series: Boolean pd.Series
         """
         expected_sum = preds.sum()
         expected_sum
@@ -78,20 +88,28 @@ class EnsembleModel:
         return preds > best_tresh
 
     def predict_optim_f1(self, single_machine_pred):
+        """Optimize threshold for F1-score
+
+        Args:
+            single_machine_pred ([type]): [description]
+
+        Returns:
+            [type]: [description]
+        """
         for target in self.targets:
             single_machine_pred[target] = self.expected_optim_f1(
                 single_machine_pred[target]
             )
         return single_machine_pred
 
-    def format_predictions(self, predictions):
-        """Format predictions to be compliant with competition one
+    def format_predictions(self, predictions: pd.DataFrame) -> pd.DataFrame:
+        """Format predictions from long to wide to be compliant with competition one
 
         Args:
-            predictions ([type]): [description]
+            predictions (pd.DataFrame): predictions
 
         Returns:
-            [type]: [description]
+            pd.DataFrame: predictions formatted
         """
         machines_names = predictions["machine"].unique().tolist()
         machines_names.sort()
@@ -113,7 +131,24 @@ class EnsembleModel:
         predictions = predictions.reset_index()
         return predictions
 
-    def train(self, df_learning, y_learning):
+    def train(self, df_learning: pd.DataFrame, y_learning: pd.Series) -> pd.DataFrame:
+        """Train the algorithm. The final algorithm is:
+
+        Cross-validation is based on a time split + machine. Not sure it was the best
+        idea but good enough.
+
+        For each target:
+            Loop over N_BAGGING times:
+                Loop over N_FOLD times:
+                    train algo
+
+        Args:
+            df_learning (pd.DataFrame): learning set
+            y_learning (pd.Series): target
+
+        Returns:
+            pd.DataFrame: out-of-fold predictions of df_learning
+        """
         predictions = df_learning[["window", "machine"]].copy()
         predictions[self.targets] = 0
 
@@ -152,9 +187,6 @@ class EnsembleModel:
                     is_valid = df_learning["FOLD"] == FOLD
                     X_train, y_train = X_learning[~is_valid], y[~is_valid]
                     X_valid, y_valid = X_learning[is_valid], y[is_valid]
-
-                    # & y_learning.operating => aparently we train on this given forum input # noqa
-                    # mask = ~y_learning[target].isna()
 
                     X_train, y_train = (
                         X_train[y_train.notnull()],
@@ -226,7 +258,15 @@ class EnsembleModel:
 
         return predictions
 
-    def predict(self, df_prod):
+    def predict(self, df_prod: pd.DataFrame) -> pd.DataFrame:
+        """Predict df_prod
+
+        Args:
+            df_prod (pd.DataFrame): df_prod
+
+        Returns:
+            pd.DataFrame: predictions correctly formatted
+        """
         predictions = df_prod[["machine", "window"]].copy()
         predictions[self.targets] = 0
 
@@ -245,7 +285,12 @@ class EnsembleModel:
         predictions = self.format_predictions(predictions)
         return predictions
 
-    def get_feature_importance(self):
+    def get_feature_importance(self) -> pd.DataFrame:
+        """Returns feature importance for each target, target
+
+        Returns:
+            pd.DataFrame: feature importance
+        """
         importance = []
         for target in self.targets:
             for BAGGING in range(self.N_BAGGING):
